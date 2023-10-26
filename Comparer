@@ -1,50 +1,65 @@
-from types import SimpleNamespace
+import cx_Oracle
+import pyodbc
 
-# Dynamic object to store metrics
-class DynamicMetric(SimpleNamespace):
+# DynamicMetric class for encapsulating domain, metric, and values
+class DynamicMetric:
+    def __init__(self, domain, metric, values):
+        self.domain = domain
+        self.metric = metric
+        self.values = values
+
     def __getitem__(self, name):
-        return self.__dict__.get(name)
-    
+        return getattr(self, name, None)
+
     def __setitem__(self, name, value):
-        self.__dict__[name] = value
+        setattr(self, name, value)
 
-# Mock method to get Oracle data
-def get_oracle_data(domain, metric):
-    oracle_data = DynamicMetric()
-    oracle_data.domain = domain
-    oracle_data.metric = metric
-    oracle_data.values = {1: 30, 2: 40, 3: 35}  # Mock data
-    return oracle_data
+# Metadata table to map metrics to corresponding Stored Procedures in Oracle and SQL along with domain
+metadata_table = {
+    'ER_wait_times': {'oracle_sp': 'sp_oracle_ER_wait_times', 'sql_sp': 'sp_sql_ER_wait_times', 'domain': 'Utilization Review'},
+    # Additional metrics can be added here
+}
 
-# Mock method to get SQL data
-def get_sql_data(domain, metric):
-    sql_data = DynamicMetric()
-    sql_data.domain = domain
-    sql_data.metric = metric
-    #sql_data.values = {1: 30, 2: 40, 3: 35} 
-    sql_data.values = {1: 30, 2: 41, 3: 36}  # Mock data
-    return sql_data
+# Function to fetch data from Oracle database
+def get_oracle_data(sp_name, domain):
+    values = {1: 30, 2: 40, 3: 35}  # Hardcoded for demonstration purposes
+    return DynamicMetric(domain, sp_name, values)
 
-# Compare function
+# Function to fetch data from SQL Server database
+def get_sql_data(sp_name, domain):
+    values = {1: 30, 2: 40, 3: 35}  # Hardcoded for demonstration purposes
+    return DynamicMetric(domain, sp_name, values)
+
+# Function to compare Oracle and SQL data
 def compare_data(oracle_data, sql_data):
-    if oracle_data.domain != sql_data.domain or oracle_data.metric != sql_data.metric:
-        return f"Cannot compare metrics from different domains or metrics: {oracle_data.domain}, {sql_data.domain} or {oracle_data.metric}, {sql_data.metric}"
+    if oracle_data.domain != sql_data.domain:
+        return f"Cannot compare metrics from different domains: {oracle_data.domain}, {sql_data.domain}", None
 
     results = {}
     for key, oracle_value in oracle_data.values.items():
         sql_value = sql_data.values.get(key, None)
         if sql_value is not None:
-            results[key] = 'Pass' if oracle_value == sql_value else 'Fail'  # changed the range here
+            results[key] = 'Pass' if oracle_value == sql_value else 'Fail'
+    return results, oracle_data.domain
 
-    return results
-
-
+# Main logic
 if __name__ == "__main__":
-    oracle_data = get_oracle_data('Utilization Review', 'ER_wait_times')
-    sql_data = get_sql_data('Utilization Review', 'ER_wait_times')
-    print(oracle_data)
-    print(sql_data)
-    comparison_results = compare_data(oracle_data, sql_data)
-    print(f"Comparing {oracle_data.domain} - {oracle_data.metric}")
-    for key, result in comparison_results.items():
-        print(f"Hospital_ID: {key}, Test Result: {result}")
+    for metric, sp_mapping in metadata_table.items():
+        oracle_sp = sp_mapping['oracle_sp']
+        sql_sp = sp_mapping['sql_sp']
+        domain = sp_mapping['domain']
+        
+        oracle_data = get_oracle_data(oracle_sp, domain)
+        sql_data = get_sql_data(sql_sp, domain)
+        
+        comparison_results, domain = compare_data(oracle_data, sql_data)
+        
+        if domain is None:
+            print(f"Error: {comparison_results}")
+        else:
+            print(f"Comparing Domain: {domain}, Metric: {metric}")
+            if isinstance(comparison_results, dict):
+                for key, result in comparison_results.items():
+                    print(f"Hospital_ID: {key}, Test Result: {result}")
+            else:
+                print("Comparison failed.")
